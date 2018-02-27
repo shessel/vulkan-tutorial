@@ -1,5 +1,7 @@
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 #include "vulkan/vulkan.h"
 
@@ -44,8 +46,10 @@ private:
 
         uint32_t glfwExtensionCount = 0;
         const char** glfwExtensions;
-
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        if (!checkGlfwExtensions(glfwExtensions, glfwExtensionCount)) {
+            std::cout << "missing extension" << std::endl;
+        }
 
         createInfo.enabledExtensionCount = glfwExtensionCount;
         createInfo.ppEnabledExtensionNames = glfwExtensions;
@@ -55,6 +59,27 @@ private:
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
             throw std::runtime_error("failed to create instance!");
         }
+    }
+
+    bool checkGlfwExtensions(const char** glfwExtensions, uint32_t glfwExtensionCount) {
+        uint32_t extensionCount = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+        std::vector<VkExtensionProperties> extensions(extensionCount);
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+
+        for (uint i = 0; i < glfwExtensionCount; ++i) {
+            bool found = false;
+            for (const auto& extension : extensions) {
+                if (strcmp(glfwExtensions[i], extension.extensionName) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
     }
 
     void mainLoop() {
