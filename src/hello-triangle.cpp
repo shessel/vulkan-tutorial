@@ -18,20 +18,34 @@ public:
     }
 
 private:
+    const int WIDTH = 800;
+    const int HEIGHT = 600;
+    const std::vector<const char*> validationLayers = {
+        "VK_LAYER_LUNARG_standard_validation"
+    };
+
+#ifdef NDEBUG
+    const bool enableValidationLayers = false;
+#else
+    const bool enableValidationLayers = true;
+#endif
+
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-        const int WIDTH = 800;
-        const int HEIGHT = 600;
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
     }
 
     void initVulkan() {
         createVkInstance();
+        createDebugCallback();
     }
 
     void createVkInstance() {
+        if (enableValidationLayers && !checkValidationLayerSupport()) {
+            throw std::runtime_error("Validation layers not available");
+        }
         VkApplicationInfo applicationInfo = {};
         applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         applicationInfo.pApplicationName = "Hello Triangle";
@@ -44,33 +58,73 @@ private:
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         createInfo.pApplicationInfo = &applicationInfo;
 
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions;
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        if (!checkGlfwExtensions(glfwExtensions, glfwExtensionCount)) {
+        std::vector<const char*> requiredExtensions = getRequiredExtensions();
+        if (!checkExtensions(requiredExtensions)) {
             std::cout << "missing extension" << std::endl;
         }
 
-        createInfo.enabledExtensionCount = glfwExtensionCount;
-        createInfo.ppEnabledExtensionNames = glfwExtensions;
+        createInfo.enabledExtensionCount = requiredExtensions.size();
+        createInfo.ppEnabledExtensionNames = requiredExtensions.data();
 
-        createInfo.enabledLayerCount = 0;
+        if (enableValidationLayers) {
+            createInfo.enabledLayerCount = validationLayers.size();
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+        } else {
+            createInfo.enabledLayerCount = 0;
+        }
 
         if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
             throw std::runtime_error("failed to create instance!");
         }
     }
 
-    bool checkGlfwExtensions(const char** glfwExtensions, uint32_t glfwExtensionCount) {
+    bool checkValidationLayerSupport() {
+        uint32_t propertyCount;
+        vkEnumerateInstanceLayerProperties(&propertyCount, nullptr);
+
+        std::vector<VkLayerProperties> layerProperties(propertyCount);
+        vkEnumerateInstanceLayerProperties(&propertyCount, layerProperties.data());
+
+        for (const auto& layer : validationLayers) {
+            bool found = false;
+            for (const auto& layerProperty : layerProperties) {
+                if (strcmp(layerProperty.layerName, layer) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    std::vector<const char*> getRequiredExtensions() {
+        uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions;
+        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+        if (enableValidationLayers) {
+            extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+        }
+
+        return extensions;
+    }
+
+    bool checkExtensions(const std::vector<const char*>& extensions) {
         uint32_t extensionCount = 0;
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> extensions(extensionCount);
-        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+        std::vector<VkExtensionProperties> extensionProperties(extensionCount);
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensionProperties.data());
 
-        for (uint i = 0; i < glfwExtensionCount; ++i) {
+        for (const auto& extension : extensions) {
             bool found = false;
-            for (const auto& extension : extensions) {
-                if (strcmp(glfwExtensions[i], extension.extensionName) == 0) {
+            for (const auto& extensionProperty : extensionProperties) {
+                if (strcmp(extension, extensionProperty.extensionName) == 0) {
                     found = true;
                     break;
                 }
@@ -82,6 +136,37 @@ private:
         return true;
     }
 
+    void createDebugCallback() {
+        if (!enableValidationLayers) {
+            return;
+        }
+
+        VkDebugReportCallbackCreateInfoEXT createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+        createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+        createInfo.pfnCallback = debugCallback;
+
+        auto func = reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT"));
+
+        if (func( instance, &createInfo, nullptr, &callback) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to set up debug callback!");
+        }
+    }
+
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+            VkDebugReportFlagsEXT /*flags*/,
+            VkDebugReportObjectTypeEXT /*objectType*/,
+            uint64_t /*object*/,
+            size_t /*location*/,
+            int32_t /*code*/,
+            const char */*layerPrefix*/,
+            const char *msg,
+            void */*userData*/) {
+        std::cerr << "Validation Layer: " << msg << std::endl;
+        return VK_FALSE;
+    }
+
+
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
@@ -89,12 +174,18 @@ private:
     }
 
     void cleanup() {
+        auto func = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT"));
+        func( instance, callback, nullptr);
+
+        vkDestroyInstance(instance, nullptr);
+
         glfwDestroyWindow(window);
         glfwTerminate();
     }
 
     GLFWwindow *window;
     VkInstance instance;
+    VkDebugReportCallbackEXT callback;
 };
 
 int main() {
