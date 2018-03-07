@@ -13,6 +13,7 @@ public:
     void run() {
         initWindow();
         initVulkan();
+        selectPhysicalDevice();
         mainLoop();
         cleanup();
     }
@@ -166,6 +167,38 @@ private:
         return VK_FALSE;
     }
 
+    void selectPhysicalDevice() {
+        uint32_t deviceCount;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+        if (deviceCount == 0) {
+            throw std::runtime_error("Found no vulkan capable device");
+        }
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+        for (const auto& device : devices) {
+            if (isDeviceSuitable(device)) {
+                physicalDevice = device;
+                break;
+            }
+        }
+        if (physicalDevice == VK_NULL_HANDLE) {
+            throw std::runtime_error("Found no suitable device");
+        }
+    }
+
+    bool isDeviceSuitable(const VkPhysicalDevice& device) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(device, &properties);
+        VkPhysicalDeviceFeatures features;
+        vkGetPhysicalDeviceFeatures(device, &features);
+
+        std::cout << properties.deviceName << std::endl;
+
+        return (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
+                properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ) &&
+            features.geometryShader;
+    }
 
     void mainLoop() {
         while (!glfwWindowShouldClose(window)) {
@@ -186,6 +219,7 @@ private:
     GLFWwindow *window;
     VkInstance instance;
     VkDebugReportCallbackEXT callback;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 };
 
 int main() {
