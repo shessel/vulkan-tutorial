@@ -13,7 +13,6 @@ public:
     void run() {
         initWindow();
         initVulkan();
-        selectPhysicalDevice();
         mainLoop();
         cleanup();
     }
@@ -31,6 +30,14 @@ private:
     const bool enableValidationLayers = true;
 #endif
 
+    struct QueueFamilyIndices {
+        int graphicsFamily = -1;
+
+        bool isComplete() {
+            return graphicsFamily >= 0;
+        }
+    };
+
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -41,6 +48,7 @@ private:
     void initVulkan() {
         createVkInstance();
         createDebugCallback();
+        selectPhysicalDevice();
     }
 
     void createVkInstance() {
@@ -193,11 +201,35 @@ private:
         VkPhysicalDeviceFeatures features;
         vkGetPhysicalDeviceFeatures(device, &features);
 
+        QueueFamilyIndices indices = findQueueFamilyIndices(device);
+
         std::cout << properties.deviceName << std::endl;
 
-        return (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
+        return indices.isComplete() &&
+            (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
                 properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ) &&
             features.geometryShader;
+    }
+
+    QueueFamilyIndices findQueueFamilyIndices(const VkPhysicalDevice& device) {
+        QueueFamilyIndices indices;
+
+        uint32_t queueFamilyCount;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> properties(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, properties.data());
+
+        for (uint32_t i = 0; i < queueFamilyCount; ++i) {
+            if (properties[i].queueCount > 0 &&  properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                indices.graphicsFamily = i;
+            }
+
+            if (indices.isComplete()) {
+                break;
+            }
+        }
+
+        return indices;
     }
 
     void mainLoop() {
