@@ -24,6 +24,9 @@ private:
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_LUNARG_standard_validation"
     };
+    const std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;
@@ -38,6 +41,12 @@ private:
         bool isComplete() {
             return graphicsFamily >= 0 && presentFamily >= 0;
         }
+    };
+
+    struct SwapChainCapabilities {
+        VkSurfaceCapabilitiesKHR surfaceCapabilities;
+        std::vector<VkSurfaceFormatKHR> surfaceFormats;
+        std::vector<VkPresentModeKHR> presentModes;
     };
 
     void initWindow() {
@@ -206,19 +215,57 @@ private:
     }
 
     bool isDeviceSuitable(const VkPhysicalDevice& device) {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(device, &properties);
-        VkPhysicalDeviceFeatures features;
-        vkGetPhysicalDeviceFeatures(device, &features);
-
         QueueFamilyIndices indices = findQueueFamilyIndices(device);
+        bool extensionsSupported = checkSupportedDeviceExtensions(device);
+        SwapChainCapabilities swapChainCapabilities = querySwapChainCapabilities(device);
+        return indices.isComplete()
+            && extensionsSupported
+            && !swapChainCapabilities.presentModes.empty()
+            && !swapChainCapabilities.surfaceFormats.empty();
+    }
 
-        std::cout << properties.deviceName << std::endl;
+    bool checkSupportedDeviceExtensions(const VkPhysicalDevice& device) {
+        uint32_t extensionPropertyCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionPropertyCount, nullptr);
+        if (extensionPropertyCount > 0) {
+            std::vector<VkExtensionProperties> extensionProperties(extensionPropertyCount);
+            vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionPropertyCount, extensionProperties.data());
 
-        return indices.isComplete() &&
-            (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ||
-                properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ) &&
-            features.geometryShader;
+            for (const auto deviceExtension : deviceExtensions) {
+                bool extensionFound = false;
+                for (const auto& extensionProperty : extensionProperties) {
+                    if (strcmp(extensionProperty.extensionName, deviceExtension) == 0) {
+                        extensionFound = true;
+                        break;
+                    }
+                }
+                if (!extensionFound) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    SwapChainCapabilities querySwapChainCapabilities(const VkPhysicalDevice& device) {
+        SwapChainCapabilities swapChainCapabilities;
+        uint32_t surfaceFormatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surfaceFormatCount, nullptr);
+        if (surfaceFormatCount > 0) {
+            swapChainCapabilities.surfaceFormats.resize(surfaceFormatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surfaceFormatCount, swapChainCapabilities.surfaceFormats.data());
+        }
+
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &swapChainCapabilities.surfaceCapabilities);
+
+        uint32_t presentModeCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+        if (presentModeCount > 0) {
+            swapChainCapabilities.presentModes.resize(presentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, swapChainCapabilities.presentModes.data());
+        }
+        return swapChainCapabilities;
     }
 
     QueueFamilyIndices findQueueFamilyIndices(const VkPhysicalDevice& device) {
@@ -270,7 +317,8 @@ private:
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.queueCreateInfoCount = queueCreateInfos.size();
         createInfo.pEnabledFeatures = &deviceFeatures;
-        createInfo.enabledExtensionCount = 0;
+        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+        createInfo.enabledExtensionCount = deviceExtensions.size();
 
         if (enableValidationLayers) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
