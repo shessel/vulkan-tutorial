@@ -48,6 +48,7 @@ private:
     void initVulkan() {
         createVkInstance();
         createDebugCallback();
+        createWindowSurface();
         selectPhysicalDevice();
         createLogicalDevice();
     }
@@ -176,6 +177,12 @@ private:
         return VK_FALSE;
     }
 
+    void createWindowSurface() {
+        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create window surface");
+        }
+    }
+
     void selectPhysicalDevice() {
         uint32_t deviceCount;
         vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -274,6 +281,9 @@ private:
 
     void cleanup() {
         vkDestroyDevice(device, nullptr);
+
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+
         auto vkDestroyDebugReportCallbackEXT = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT"));
         vkDestroyDebugReportCallbackEXT( instance, callback, nullptr);
 
@@ -286,6 +296,7 @@ private:
     GLFWwindow *window;
     VkInstance instance;
     VkDebugReportCallbackEXT callback;
+    VkSurfaceKHR surface;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device;
     VkQueue graphicsQueue;
