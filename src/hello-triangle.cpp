@@ -537,6 +537,7 @@ private:
         scissor.offset = {0, 0};
 
         VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {};
+        viewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportStateCreateInfo.viewportCount = 1;
         viewportStateCreateInfo.pViewports = &viewport;
         viewportStateCreateInfo.scissorCount = 1;
@@ -577,10 +578,30 @@ private:
         if (vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create pipeline layout");
         }
+
+        VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
+        pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineCreateInfo.stageCount = sizeof(shaderStages)/sizeof(shaderStages[0]);
+        pipelineCreateInfo.pStages = shaderStages;
+        pipelineCreateInfo.pVertexInputState = &vertexInputStateCreateInfo;
+        pipelineCreateInfo.pInputAssemblyState = &inputAssemblyStateCreateInfo;
+        pipelineCreateInfo.pViewportState = &viewportStateCreateInfo;
+        pipelineCreateInfo.pRasterizationState = &rasterizationStateCreateInfo;
+        pipelineCreateInfo.pMultisampleState = &multisampleStateCreateInfo;
+        pipelineCreateInfo.pDepthStencilState = nullptr;
+        pipelineCreateInfo.pColorBlendState = &colorBlendStateCreateInfo;
+        pipelineCreateInfo.pDynamicState = nullptr;
+        pipelineCreateInfo.layout = pipelineLayout;
+        pipelineCreateInfo.renderPass = renderPass;
+        pipelineCreateInfo.subpass = 0;
+
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &pipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create graphics pipeline");
+        }
     }
 
     static std::vector<char> readFile(const std::string& fileName) {
-        std::fstream fileStream(fileName, std::ios::ate | std::ios::binary);
+        std::ifstream fileStream(fileName, std::ios::ate | std::ios::binary);
         if (!fileStream.is_open()) {
             throw std::runtime_error("failed to open file " + fileName);
         }
@@ -611,6 +632,7 @@ private:
     }
 
     void cleanup() {
+        vkDestroyPipeline(device, pipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
         vkDestroyRenderPass(device, renderPass, nullptr);
@@ -655,6 +677,7 @@ private:
 
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
+    VkPipeline pipeline;
 };
 
 int main() {
