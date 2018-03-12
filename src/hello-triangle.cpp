@@ -55,8 +55,15 @@ private:
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+
+        glfwSetWindowUserPointer(window, this);
+        glfwSetWindowSizeCallback(window, HelloTriangleApplication::sizeCallback);
+    }
+
+    static void sizeCallback(GLFWwindow *window, int /*width*/, int /*height*/) {
+        HelloTriangleApplication* app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        app->recreateSwapchain();
     }
 
     void initVulkan() {
@@ -65,6 +72,7 @@ private:
         createWindowSurface();
         selectPhysicalDevice();
         createLogicalDevice();
+        createShaders();
         createSwapChain();
         createImageViews();
         createRenderPass();
@@ -73,6 +81,25 @@ private:
         createCommandPool();
         createCommandBuffers();
         createSemaphores();
+    }
+
+    void recreateSwapchain() {
+        int width, height;
+        glfwGetWindowSize(window, &width, &height);
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        vkDeviceWaitIdle(device);
+
+        cleanupSwapchain();
+
+        createSwapChain();
+        createImageViews();
+        createRenderPass();
+        createGraphicsPipeline();
+        createFramebuffers();
+        createCommandBuffers();
     }
 
     void createVkInstance() {
@@ -337,7 +364,9 @@ private:
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
             return capabilities.currentExtent;
         } else {
-            VkExtent2D actualExtent = {WIDTH, HEIGHT};
+            int width, height;
+            glfwGetWindowSize(window, &width, &height);
+            VkExtent2D actualExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
             actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(actualExtent.width, capabilities.maxImageExtent.width));
             actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(actualExtent.height, capabilities.maxImageExtent.height));
             return actualExtent;
@@ -382,6 +411,13 @@ private:
 
         vkGetDeviceQueue( device, indices.graphicsFamily, 0, &graphicsQueue);
         vkGetDeviceQueue( device, indices.presentFamily, 0, &presentQueue);
+    }
+
+    void createShaders() {
+        auto vertexShaderCode = readFile("vert.spv");
+        auto fragmentShaderCode = readFile("frag.spv");
+        vertexShaderModule = createShaderModule(vertexShaderCode);
+        fragmentShaderModule = createShaderModule(fragmentShaderCode);
     }
 
     void createSwapChain() {
@@ -505,11 +541,6 @@ private:
     }
 
     void createGraphicsPipeline() {
-        auto vertexShaderCode = readFile("vert.spv");
-        auto fragmentShaderCode = readFile("frag.spv");
-        vertexShaderModule = createShaderModule(vertexShaderCode);
-        fragmentShaderModule = createShaderModule(fragmentShaderCode);
-
         VkPipelineShaderStageCreateInfo vertexStageCreateInfo = {};
         vertexStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertexStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -735,7 +766,14 @@ private:
 
     void render() {
         uint32_t imageIndex;
-        vkAcquireNextImageKHR(device, swapchain, std::numeric_limits<uint64_t>::max(), imageAcquiredSemaphore, VK_NULL_HANDLE, &imageIndex);
+        VkResult acquireResult = vkAcquireNextImageKHR(device, swapchain, std::numeric_limits<uint64_t>::max(), imageAcquiredSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+        if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreateSwapchain();
+            return;
+        } else if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR) {
+            throw std::runtime_error("failed to acquire swapchain image");
+        }
 
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -759,33 +797,45 @@ private:
         presentInfo.pImageIndices = &imageIndex;
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = &renderingFinishedSemaphore;
-        if (vkQueuePresentKHR(presentQueue, &presentInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to present result");
+        VkResult presentResult = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
+            recreateSwapchain();
+        } else if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR) {
+            throw std::runtime_error("failed to acquire swapchain image");
         }
     }
 
-    void cleanup() {
-        vkDestroySemaphore(device, renderingFinishedSemaphore, nullptr);
-        vkDestroySemaphore(device, imageAcquiredSemaphore, nullptr);
-
-        vkDestroyCommandPool(device, commandPool, nullptr);
-
+    void cleanupSwapchain() {
         for (const auto& framebuffer : swapChainFramebuffers) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
+
+        vkFreeCommandBuffers(device, commandPool, commandBuffers.size(), commandBuffers.data());
 
         vkDestroyPipeline(device, pipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
         vkDestroyRenderPass(device, renderPass, nullptr);
 
-        vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
-        vkDestroyShaderModule(device, vertexShaderModule, nullptr);
-
         for (const auto& imageView : swapChainImageViews) {
             vkDestroyImageView(device, imageView, nullptr);
         }
+
         vkDestroySwapchainKHR(device, swapchain, nullptr);
+    }
+
+    void cleanup() {
+        cleanupSwapchain();
+
+        vkDestroySemaphore(device, renderingFinishedSemaphore, nullptr);
+        vkDestroySemaphore(device, imageAcquiredSemaphore, nullptr);
+
+        vkDestroyCommandPool(device, commandPool, nullptr);
+
+        vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
+        vkDestroyShaderModule(device, vertexShaderModule, nullptr);
+
         vkDestroyDevice(device, nullptr);
 
         vkDestroySurfaceKHR(instance, surface, nullptr);
