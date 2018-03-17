@@ -10,6 +10,11 @@ public:
     }
 
     ~Instance() {
+        auto vkDestroyDebugReportCallbackEXT = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT"));
+        for (const auto& callback : debugCallbacks) {
+            vkDestroyDebugReportCallbackEXT( instance, callback, nullptr);
+        }
+
         vkDestroyInstance(instance, nullptr);
     }
 
@@ -21,8 +26,29 @@ public:
         return instance;
     }
 
+    void createDebugCallback(PFN_vkDebugReportCallbackEXT debugCallback) {
+        if (!enableValidationLayers) {
+            return;
+        }
+
+        VkDebugReportCallbackCreateInfoEXT createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+        createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+        createInfo.pfnCallback = debugCallback;
+
+        auto vkCreateDebugReportCallbackEXT = reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT"));
+        VkDebugReportCallbackEXT callback;
+
+        if (vkCreateDebugReportCallbackEXT( instance, &createInfo, nullptr, &callback) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to set up debug callback!");
+        }
+
+        debugCallbacks.push_back(callback);
+    }
+
 private:
     VkInstance instance;
+    std::vector<VkDebugReportCallbackEXT> debugCallbacks;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

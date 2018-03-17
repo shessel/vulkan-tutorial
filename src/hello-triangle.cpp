@@ -105,7 +105,7 @@ private:
     }
 
     void initVulkan() {
-        createDebugCallback();
+        instance.createDebugCallback(debugCallback);
         createWindowSurface();
         selectPhysicalDevice();
         createLogicalDevice();
@@ -138,23 +138,6 @@ private:
         createGraphicsPipeline();
         createFramebuffers();
         createCommandBuffers();
-    }
-
-    void createDebugCallback() {
-        if (!enableValidationLayers) {
-            return;
-        }
-
-        VkDebugReportCallbackCreateInfoEXT createInfo = {};
-        createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-        createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-        createInfo.pfnCallback = debugCallback;
-
-        auto vkCreateDebugReportCallbackEXT = reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT"));
-
-        if (vkCreateDebugReportCallbackEXT( instance, &createInfo, nullptr, &callback) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to set up debug callback!");
-        }
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -832,15 +815,11 @@ private:
         vkDestroyDevice(device, nullptr);
 
         vkDestroySurfaceKHR(instance, surface, nullptr);
-
-        auto vkDestroyDebugReportCallbackEXT = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT"));
-        vkDestroyDebugReportCallbackEXT( instance, callback, nullptr);
     }
 
     GlfwWindow window;
 
     Render::Vulkan::Instance instance;
-    VkDebugReportCallbackEXT callback;
     VkSurfaceKHR surface;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device;
