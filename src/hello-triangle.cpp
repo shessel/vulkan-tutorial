@@ -12,14 +12,17 @@
 
 #include <glm/glm.hpp>
 
+#include "render/vulkan/Instance.hpp"
 #include "ui/GlfwWindow.h"
 
 class HelloTriangleApplication {
 public:
-    HelloTriangleApplication() : window(WIDTH, HEIGHT) {}
-    void run() {
+    HelloTriangleApplication() : window(WIDTH, HEIGHT), instance(window.getRequiredVulkanExtensions()) {
         window.setSizeCallback(sizeCallback);
         window.setCallbackObject(this);
+    }
+
+    void run() {
         initVulkan();
         mainLoop();
         cleanup();
@@ -102,7 +105,6 @@ private:
     }
 
     void initVulkan() {
-        createVkInstance();
         createDebugCallback();
         createWindowSurface();
         selectPhysicalDevice();
@@ -136,96 +138,6 @@ private:
         createGraphicsPipeline();
         createFramebuffers();
         createCommandBuffers();
-    }
-
-    void createVkInstance() {
-        if (enableValidationLayers && !checkValidationLayerSupport()) {
-            throw std::runtime_error("Validation layers not available");
-        }
-        VkApplicationInfo applicationInfo = {};
-        applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        applicationInfo.pApplicationName = "Hello Triangle";
-        applicationInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        applicationInfo.pEngineName = "No Engine";
-        applicationInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        applicationInfo.apiVersion = VK_API_VERSION_1_0;
-
-        VkInstanceCreateInfo createInfo = {};
-        createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        createInfo.pApplicationInfo = &applicationInfo;
-
-        std::vector<const char*> requiredExtensions = getRequiredExtensions();
-        if (!checkExtensions(requiredExtensions)) {
-            std::cout << "missing extension" << std::endl;
-        }
-
-        createInfo.enabledExtensionCount = requiredExtensions.size();
-        createInfo.ppEnabledExtensionNames = requiredExtensions.data();
-
-        if (enableValidationLayers) {
-            createInfo.enabledLayerCount = validationLayers.size();
-            createInfo.ppEnabledLayerNames = validationLayers.data();
-        } else {
-            createInfo.enabledLayerCount = 0;
-        }
-
-        if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create instance!");
-        }
-    }
-
-    bool checkValidationLayerSupport() {
-        uint32_t propertyCount;
-        vkEnumerateInstanceLayerProperties(&propertyCount, nullptr);
-
-        std::vector<VkLayerProperties> layerProperties(propertyCount);
-        vkEnumerateInstanceLayerProperties(&propertyCount, layerProperties.data());
-
-        for (const auto& layer : validationLayers) {
-            bool found = false;
-            for (const auto& layerProperty : layerProperties) {
-                if (strcmp(layerProperty.layerName, layer) == 0) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    std::vector<const char*> getRequiredExtensions() {
-        std::vector<const char*> extensions = window.getRequiredVulkanExtensions();
-
-        if (enableValidationLayers) {
-            extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-        }
-
-        return extensions;
-    }
-
-    bool checkExtensions(const std::vector<const char*>& extensions) {
-        uint32_t extensionCount = 0;
-        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> extensionProperties(extensionCount);
-        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensionProperties.data());
-
-        for (const auto& extension : extensions) {
-            bool found = false;
-            for (const auto& extensionProperty : extensionProperties) {
-                if (strcmp(extension, extensionProperty.extensionName) == 0) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return false;
-            }
-        }
-        return true;
     }
 
     void createDebugCallback() {
@@ -923,13 +835,11 @@ private:
 
         auto vkDestroyDebugReportCallbackEXT = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT"));
         vkDestroyDebugReportCallbackEXT( instance, callback, nullptr);
-
-        vkDestroyInstance(instance, nullptr);
     }
 
     GlfwWindow window;
 
-    VkInstance instance;
+    Render::Vulkan::Instance instance;
     VkDebugReportCallbackEXT callback;
     VkSurfaceKHR surface;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;

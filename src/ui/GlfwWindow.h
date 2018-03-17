@@ -1,3 +1,5 @@
+#pragma once
+
 #include <memory>
 
 #define GLFW_INCLUDE_VULKAN
