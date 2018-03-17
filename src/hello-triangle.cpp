@@ -14,6 +14,7 @@
 
 #include "render/vulkan/Instance.hpp"
 #include "render/vulkan/PhysicalDevice.hpp"
+#include "render/vulkan/Device.hpp"
 #include "ui/GlfwWindow.h"
 
 using Render::Vulkan::QueueFamilyIndices;
@@ -24,13 +25,19 @@ public:
     HelloTriangleApplication() :
         window(WIDTH, HEIGHT),
         instance(window.getRequiredVulkanExtensions()),
-        physicalDevice(VK_NULL_HANDLE)
+        physicalDevice(VK_NULL_HANDLE),
+        device(VK_NULL_HANDLE)
     {
         window.setSizeCallback(sizeCallback);
         window.setCallbackObject(this);
         instance.createDebugCallback(debugCallback);
         window.createVulkanSurface(instance, &surface);
         physicalDevice = instance.selectDefaultPhysicalDeviceForSurface(surface, deviceExtensions);
+        QueueFamilyIndices indices = physicalDevice.findQueueFamilyIndices(surface);
+        // TODO: improve device creation
+        device = physicalDevice.createDevice(surface, deviceExtensions, enableValidationLayers);
+        graphicsQueue = device.getQueue(indices.graphicsFamily);
+        presentQueue = device.getQueue(indices.presentFamily);
     }
 
     void run() {
@@ -81,10 +88,6 @@ private:
         {{0.0f, 0.5f}, {0.0f, 1.0f, 1.0f}},
     };
 
-    const std::vector<const char*> validationLayers = {
-        "VK_LAYER_LUNARG_standard_validation"
-    };
-
     const std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
@@ -101,7 +104,6 @@ private:
     }
 
     void initVulkan() {
-        createLogicalDevice();
         createShaders();
         createSwapChain();
         createImageViews();
@@ -144,86 +146,6 @@ private:
             void */*userData*/) {
         std::cerr << "Validation Layer: " << msg << std::endl;
         return VK_FALSE;
-    }
-
-    VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& supportedFormats) {
-        if (supportedFormats.size() == 1 && supportedFormats[0].format == VK_FORMAT_UNDEFINED) {
-            return {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
-        }
-
-        for (const auto& format : supportedFormats) {
-            if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                return format;
-            }
-        }
-
-        // fallback option
-        return supportedFormats[0];
-    }
-
-    VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& supportedModes) {
-        for (const auto& mode : supportedModes) {
-            if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
-                return mode;
-            } else if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-                return mode;
-            }
-        }
-        // fallback option
-        return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
-    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-            return capabilities.currentExtent;
-        } else {
-            int width = window.getWidth();
-            int height = window.getHeight();
-            VkExtent2D actualExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
-            actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(actualExtent.width, capabilities.maxImageExtent.width));
-            actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(actualExtent.height, capabilities.maxImageExtent.height));
-            return actualExtent;
-        }
-    }
-
-    void createLogicalDevice() {
-        QueueFamilyIndices indices = physicalDevice.findQueueFamilyIndices(surface);
-        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<int> uniqueQueueFamilyIndices = {indices.graphicsFamily, indices.presentFamily};
-
-        for (auto index : uniqueQueueFamilyIndices) {
-            VkDeviceQueueCreateInfo queueCreateInfo = {};
-            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueCreateInfo.queueFamilyIndex = index;
-            queueCreateInfo.queueCount = 1;
-            float queuePriority = 1.0f;
-            queueCreateInfo.pQueuePriorities = &queuePriority;
-            queueCreateInfos.push_back(queueCreateInfo);
-        }
-
-        VkPhysicalDeviceFeatures deviceFeatures = {};
-
-        VkDeviceCreateInfo createInfo = {};
-        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pQueueCreateInfos = queueCreateInfos.data();
-        createInfo.queueCreateInfoCount = queueCreateInfos.size();
-        createInfo.pEnabledFeatures = &deviceFeatures;
-        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-        createInfo.enabledExtensionCount = deviceExtensions.size();
-
-        if (enableValidationLayers) {
-            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-            createInfo.ppEnabledLayerNames = validationLayers.data();
-        } else {
-            createInfo.enabledLayerCount = 0;
-        }
-
-        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create logical device!");
-        }
-
-        vkGetDeviceQueue( device, indices.graphicsFamily, 0, &graphicsQueue);
-        vkGetDeviceQueue( device, indices.presentFamily, 0, &presentQueue);
     }
 
     void createShaders() {
@@ -284,6 +206,46 @@ private:
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
+    }
+
+    VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& supportedFormats) {
+        if (supportedFormats.size() == 1 && supportedFormats[0].format == VK_FORMAT_UNDEFINED) {
+            return {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+        }
+
+        for (const auto& format : supportedFormats) {
+            if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                return format;
+            }
+        }
+
+        // fallback option
+        return supportedFormats[0];
+    }
+
+    VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& supportedModes) {
+        for (const auto& mode : supportedModes) {
+            if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+                return mode;
+            } else if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+                return mode;
+            }
+        }
+        // fallback option
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            return capabilities.currentExtent;
+        } else {
+            int width = window.getWidth();
+            int height = window.getHeight();
+            VkExtent2D actualExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+            actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(actualExtent.width, capabilities.maxImageExtent.width));
+            actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(actualExtent.height, capabilities.maxImageExtent.height));
+            return actualExtent;
+        }
     }
 
     void createImageViews() {
@@ -700,8 +662,6 @@ private:
         vkDestroyShaderModule(device, fragmentShaderModule, nullptr);
         vkDestroyShaderModule(device, vertexShaderModule, nullptr);
 
-        vkDestroyDevice(device, nullptr);
-
         vkDestroySurfaceKHR(instance, surface, nullptr);
     }
 
@@ -710,7 +670,7 @@ private:
     Render::Vulkan::Instance instance;
     VkSurfaceKHR surface;
     Render::Vulkan::PhysicalDevice physicalDevice;
-    VkDevice device;
+    Render::Vulkan::Device device;
     VkQueue graphicsQueue;
     VkQueue presentQueue;
 

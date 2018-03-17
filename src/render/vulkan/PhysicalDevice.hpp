@@ -1,18 +1,14 @@
 #pragma once
+
 #include <vector>
+
 #include <vulkan/vulkan.h>
+
+#include "Device.hpp"
+#include "QueueFamilyIndices.hpp"
 
 namespace Render::Vulkan
 {
-struct QueueFamilyIndices {
-    int graphicsFamily = -1;
-    int presentFamily = -1;
-
-    bool isComplete() {
-        return graphicsFamily >= 0 && presentFamily >= 0;
-    }
-};
-
 struct SwapChainCapabilities {
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
     std::vector<VkSurfaceFormatKHR> surfaceFormats;
@@ -23,12 +19,58 @@ class PhysicalDevice {
 public:
     PhysicalDevice(VkPhysicalDevice physicalDevice) : device(physicalDevice) {}
 
+    PhysicalDevice& operator=(const PhysicalDevice& other) {
+        device = other.device;
+        return *this;
+    }
+
     operator VkPhysicalDevice&() {
         return device;
     }
 
     operator const VkPhysicalDevice&() const {
         return device;
+    }
+
+    Device createDevice(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions, bool enableValidationLayers) {
+        QueueFamilyIndices indices = findQueueFamilyIndices(surface);
+
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::set<int> uniqueQueueFamilyIndices = {indices.graphicsFamily, indices.presentFamily};
+
+        for (auto index : uniqueQueueFamilyIndices) {
+            VkDeviceQueueCreateInfo queueCreateInfo = {};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = index;
+            queueCreateInfo.queueCount = 1;
+            float queuePriority = 1.0f;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfos.push_back(queueCreateInfo);
+        }
+
+        VkPhysicalDeviceFeatures deviceFeatures = {};
+
+        VkDeviceCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pQueueCreateInfos = queueCreateInfos.data();
+        createInfo.queueCreateInfoCount = queueCreateInfos.size();
+        createInfo.pEnabledFeatures = &deviceFeatures;
+        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+        createInfo.enabledExtensionCount = deviceExtensions.size();
+
+        if (enableValidationLayers) {
+            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+        } else {
+            createInfo.enabledLayerCount = 0;
+        }
+
+        VkDevice deviceToCreate;
+        if (vkCreateDevice(device, &createInfo, nullptr, &deviceToCreate) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create logical device!");
+        }
+
+        return Device(deviceToCreate);
     }
 
     bool isSuitable(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
@@ -114,5 +156,9 @@ private:
     }
 
     VkPhysicalDevice device;
+
+    const std::vector<const char*> validationLayers = {
+        "VK_LAYER_LUNARG_standard_validation"
+    };
 };
 }
