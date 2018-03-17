@@ -1,6 +1,8 @@
 #pragma once
 #include <vulkan/vulkan.h>
 
+#include "PhysicalDevice.hpp"
+
 namespace Render::Vulkan
 {
 class Instance {
@@ -44,6 +46,26 @@ public:
         }
 
         debugCallbacks.push_back(callback);
+    }
+
+    PhysicalDevice selectDefaultPhysicalDeviceForSurface(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
+        uint32_t deviceCount;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+        if (deviceCount == 0) {
+            throw std::runtime_error("Found no vulkan capable device");
+        }
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+        for (const auto& device : devices) {
+            PhysicalDevice physicalDevice(device);
+            if (physicalDevice.isSuitable(surface, deviceExtensions)) {
+                return physicalDevice;
+                break;
+            }
+        }
+
+        throw std::runtime_error("Found no suitable device");
     }
 
 private:

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <memory>
+#include <vector>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -14,6 +14,7 @@ public:
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
     }
+
     ~GlfwWindow() {
         glfwDestroyWindow(window);
         glfwTerminate();

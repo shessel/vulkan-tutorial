@@ -13,13 +13,24 @@
 #include <glm/glm.hpp>
 
 #include "render/vulkan/Instance.hpp"
+#include "render/vulkan/PhysicalDevice.hpp"
 #include "ui/GlfwWindow.h"
+
+using Render::Vulkan::QueueFamilyIndices;
+using Render::Vulkan::SwapChainCapabilities;
 
 class HelloTriangleApplication {
 public:
-    HelloTriangleApplication() : window(WIDTH, HEIGHT), instance(window.getRequiredVulkanExtensions()) {
+    HelloTriangleApplication() :
+        window(WIDTH, HEIGHT),
+        instance(window.getRequiredVulkanExtensions()),
+        physicalDevice(VK_NULL_HANDLE)
+    {
         window.setSizeCallback(sizeCallback);
         window.setCallbackObject(this);
+        instance.createDebugCallback(debugCallback);
+        window.createVulkanSurface(instance, &surface);
+        physicalDevice = instance.selectDefaultPhysicalDeviceForSurface(surface, deviceExtensions);
     }
 
     void run() {
@@ -84,30 +95,12 @@ private:
     const bool enableValidationLayers = true;
 #endif
 
-    struct QueueFamilyIndices {
-        int graphicsFamily = -1;
-        int presentFamily = -1;
-
-        bool isComplete() {
-            return graphicsFamily >= 0 && presentFamily >= 0;
-        }
-    };
-
-    struct SwapChainCapabilities {
-        VkSurfaceCapabilitiesKHR surfaceCapabilities;
-        std::vector<VkSurfaceFormatKHR> surfaceFormats;
-        std::vector<VkPresentModeKHR> presentModes;
-    };
-
     static void sizeCallback(const GlfwWindow& window, int /*width*/, int /*height*/) {
         HelloTriangleApplication* app = reinterpret_cast<HelloTriangleApplication*>(window.getCallbackObject());
         app->recreateSwapchain();
     }
 
     void initVulkan() {
-        instance.createDebugCallback(debugCallback);
-        createWindowSurface();
-        selectPhysicalDevice();
         createLogicalDevice();
         createShaders();
         createSwapChain();
@@ -153,111 +146,6 @@ private:
         return VK_FALSE;
     }
 
-    void createWindowSurface() {
-        window.createVulkanSurface(instance, &surface);
-    }
-
-    void selectPhysicalDevice() {
-        uint32_t deviceCount;
-        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-        if (deviceCount == 0) {
-            throw std::runtime_error("Found no vulkan capable device");
-        }
-        std::vector<VkPhysicalDevice> devices(deviceCount);
-        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-        for (const auto& device : devices) {
-            if (isDeviceSuitable(device)) {
-                physicalDevice = device;
-                break;
-            }
-        }
-        if (physicalDevice == VK_NULL_HANDLE) {
-            throw std::runtime_error("Found no suitable device");
-        }
-    }
-
-    bool isDeviceSuitable(const VkPhysicalDevice& device) {
-        QueueFamilyIndices indices = findQueueFamilyIndices(device);
-        bool extensionsSupported = checkSupportedDeviceExtensions(device);
-        SwapChainCapabilities swapChainCapabilities = querySwapChainCapabilities(device);
-        return indices.isComplete()
-            && extensionsSupported
-            && !swapChainCapabilities.presentModes.empty()
-            && !swapChainCapabilities.surfaceFormats.empty();
-    }
-
-    QueueFamilyIndices findQueueFamilyIndices(const VkPhysicalDevice& device) {
-        QueueFamilyIndices indices;
-
-        uint32_t queueFamilyCount;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-        std::vector<VkQueueFamilyProperties> properties(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, properties.data());
-
-        for (uint32_t i = 0; i < queueFamilyCount; ++i) {
-            VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR( device, i, surface, &presentSupport);
-            if (properties[i].queueCount > 0 && presentSupport) {
-                indices.presentFamily = i;
-            }
-
-            if (properties[i].queueCount > 0 && properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                indices.graphicsFamily = i;
-            }
-
-            if (indices.isComplete()) {
-                break;
-            }
-        }
-
-        return indices;
-    }
-
-    bool checkSupportedDeviceExtensions(const VkPhysicalDevice& device) {
-        uint32_t extensionPropertyCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionPropertyCount, nullptr);
-        if (extensionPropertyCount > 0) {
-            std::vector<VkExtensionProperties> extensionProperties(extensionPropertyCount);
-            vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionPropertyCount, extensionProperties.data());
-
-            for (const auto deviceExtension : deviceExtensions) {
-                bool extensionFound = false;
-                for (const auto& extensionProperty : extensionProperties) {
-                    if (strcmp(extensionProperty.extensionName, deviceExtension) == 0) {
-                        extensionFound = true;
-                        break;
-                    }
-                }
-                if (!extensionFound) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return false;
-    }
-
-    SwapChainCapabilities querySwapChainCapabilities(const VkPhysicalDevice& device) {
-        SwapChainCapabilities swapChainCapabilities;
-        uint32_t surfaceFormatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surfaceFormatCount, nullptr);
-        if (surfaceFormatCount > 0) {
-            swapChainCapabilities.surfaceFormats.resize(surfaceFormatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surfaceFormatCount, swapChainCapabilities.surfaceFormats.data());
-        }
-
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &swapChainCapabilities.surfaceCapabilities);
-
-        uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-        if (presentModeCount > 0) {
-            swapChainCapabilities.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, swapChainCapabilities.presentModes.data());
-        }
-        return swapChainCapabilities;
-    }
-
     VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& supportedFormats) {
         if (supportedFormats.size() == 1 && supportedFormats[0].format == VK_FORMAT_UNDEFINED) {
             return {VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
@@ -299,7 +187,7 @@ private:
     }
 
     void createLogicalDevice() {
-        QueueFamilyIndices indices = findQueueFamilyIndices(physicalDevice);
+        QueueFamilyIndices indices = physicalDevice.findQueueFamilyIndices(surface);
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         std::set<int> uniqueQueueFamilyIndices = {indices.graphicsFamily, indices.presentFamily};
 
@@ -346,7 +234,7 @@ private:
     }
 
     void createSwapChain() {
-        SwapChainCapabilities swapChainCapabilities = querySwapChainCapabilities(physicalDevice);
+        SwapChainCapabilities swapChainCapabilities = physicalDevice.querySwapChainCapabilities(surface);
         VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(swapChainCapabilities.surfaceFormats);
         VkPresentModeKHR presentMode = choosePresentMode(swapChainCapabilities.presentModes);
         VkExtent2D extent = chooseSwapExtent(swapChainCapabilities.surfaceCapabilities);
@@ -366,7 +254,7 @@ private:
         swapChainCreateInfo.imageArrayLayers = 1;
         swapChainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-        QueueFamilyIndices indices = findQueueFamilyIndices(physicalDevice);
+        QueueFamilyIndices indices = physicalDevice.findQueueFamilyIndices(surface);
         uint32_t queueFamiliyIndices[] = {
             static_cast<uint32_t>(indices.graphicsFamily),
             static_cast<uint32_t>(indices.presentFamily)
@@ -618,7 +506,7 @@ private:
     }
 
     void createCommandPool() {
-        QueueFamilyIndices indices = findQueueFamilyIndices(physicalDevice);
+        QueueFamilyIndices indices = physicalDevice.findQueueFamilyIndices(surface);
 
         VkCommandPoolCreateInfo commandPoolCreateInfo = {};
         commandPoolCreateInfo.sType =VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -821,7 +709,7 @@ private:
 
     Render::Vulkan::Instance instance;
     VkSurfaceKHR surface;
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    Render::Vulkan::PhysicalDevice physicalDevice;
     VkDevice device;
     VkQueue graphicsQueue;
     VkQueue presentQueue;
