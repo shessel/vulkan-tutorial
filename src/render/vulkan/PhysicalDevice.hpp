@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include <vulkan/vulkan.h>
@@ -15,24 +16,27 @@ struct SwapChainCapabilities {
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+class Instance;
+
 class PhysicalDevice {
 public:
     PhysicalDevice(VkPhysicalDevice physicalDevice) : device(physicalDevice) {}
 
-    PhysicalDevice& operator=(const PhysicalDevice& other) {
-        device = other.device;
+    PhysicalDevice(PhysicalDevice&& other) : device(other.device) {
+        other.device = VK_NULL_HANDLE;
+    }
+
+    PhysicalDevice& operator=(PhysicalDevice&& other) {
+        this->device = other.device;
+        other.device = VK_NULL_HANDLE;
         return *this;
     }
 
-    operator VkPhysicalDevice&() {
+    VkPhysicalDevice getHandle() const {
         return device;
     }
 
-    operator const VkPhysicalDevice&() const {
-        return device;
-    }
-
-    Device createDevice(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions, bool enableValidationLayers) {
+    std::shared_ptr<Device> createDevice(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions, bool enableValidationLayers) {
         QueueFamilyIndices indices = findQueueFamilyIndices(surface);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -70,7 +74,7 @@ public:
             throw std::runtime_error("Failed to create logical device!");
         }
 
-        return Device(deviceToCreate);
+        return std::shared_ptr<Device>(new Device(deviceToCreate));
     }
 
     bool isSuitable(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
@@ -131,6 +135,12 @@ public:
     }
 
 private:
+    friend Instance;
+
+    PhysicalDevice(const PhysicalDevice& other) = delete;
+
+    PhysicalDevice& operator=(const PhysicalDevice& other) = delete;
+
     bool checkSupportedDeviceExtensions(const std::vector<const char*>& deviceExtensions) {
         uint32_t extensionPropertyCount;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionPropertyCount, nullptr);

@@ -1,4 +1,7 @@
 #pragma once
+
+#include <memory>
+
 #include <vulkan/vulkan.h>
 
 #include "PhysicalDevice.hpp"
@@ -18,6 +21,20 @@ public:
         }
 
         vkDestroyInstance(instance, nullptr);
+    }
+
+    Instance(const Instance& other) = delete;
+
+    Instance& operator=(const Instance& other) = delete;
+
+    Instance(Instance&& other) : instance(other.instance) {
+        other.instance = VK_NULL_HANDLE;
+    }
+
+    Instance& operator=(Instance&& other) {
+        this->instance = other.instance;
+        other.instance = VK_NULL_HANDLE;
+        return *this;
     }
 
     operator VkInstance&() {
@@ -48,7 +65,7 @@ public:
         debugCallbacks.push_back(callback);
     }
 
-    PhysicalDevice selectDefaultPhysicalDeviceForSurface(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
+    std::shared_ptr<PhysicalDevice> selectDefaultPhysicalDeviceForSurface(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
         uint32_t deviceCount;
         vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
         if (deviceCount == 0) {
@@ -58,8 +75,8 @@ public:
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
         for (const auto& device : devices) {
-            PhysicalDevice physicalDevice(device);
-            if (physicalDevice.isSuitable(surface, deviceExtensions)) {
+            std::shared_ptr<PhysicalDevice> physicalDevice(new PhysicalDevice(device));
+            if (physicalDevice->isSuitable(surface, deviceExtensions)) {
                 return physicalDevice;
                 break;
             }

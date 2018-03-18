@@ -11,6 +11,8 @@ class Device {
 public:
     Device(VkDevice device) : device(device) {}
 
+    Device(const Device&) = delete;
+
     Device(Device&& other) : device(other.device) {
         other.device = VK_NULL_HANDLE;
     }
@@ -19,18 +21,12 @@ public:
         vkDestroyDevice(device, nullptr);
     }
 
+    Device& operator=(const Device& other) = delete;
+
     Device& operator=(Device&& other) {
         device = other.device;
         other.device = VK_NULL_HANDLE;
         return *this;
-    }
-
-    operator VkDevice&() {
-        return device;
-    }
-
-    operator const VkDevice&() const {
-        return device;
     }
 
     VkQueue getQueue(uint32_t index) {
@@ -39,9 +35,11 @@ public:
         return result;
     }
 
+    VkDevice getHandle() const {
+        return device;
+    }
+
 private:
     VkDevice device;
-    Device(const Device&){};
-    Device& operator=(const Device& other);
 };
 }
