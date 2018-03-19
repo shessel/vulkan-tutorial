@@ -62,6 +62,8 @@ public:
         vkGetSwapchainImagesKHR(device->getHandle(), swapchain, &imageCount, nullptr);
         images.resize(imageCount);
         vkGetSwapchainImagesKHR(device->getHandle(), swapchain, &imageCount, images.data());
+
+        createImageViews();
     }
 
     Swapchain(const Swapchain& other) = delete;
@@ -82,7 +84,6 @@ public:
         vkDestroySwapchainKHR(device, swapchain, nullptr);
     }
 
-public:
     VkSwapchainKHR getHandle() const {
         return swapchain;
     }
@@ -99,6 +100,10 @@ public:
         return images;
     }
 
+    const std::vector<VkImageView> getImageViews() const {
+        return imageViews;
+    }
+
 private:
     VkDevice device;
     VkSwapchainKHR swapchain;
@@ -106,6 +111,7 @@ private:
     VkSurfaceFormatKHR surfaceFormat;
     VkPresentModeKHR presentMode;
     std::vector<VkImage> images;
+    std::vector<VkImageView> imageViews;
 
     VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& supportedFormats) {
         if (supportedFormats.size() == 1 && supportedFormats[0].format == VK_FORMAT_UNDEFINED) {
@@ -145,6 +151,30 @@ private:
             actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(actualExtent.width, capabilities.maxImageExtent.width));
             actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(actualExtent.height, capabilities.maxImageExtent.height));
             return actualExtent;
+        }
+    }
+
+    void createImageViews() {
+        imageViews.resize(images.size());
+        for (size_t i = 0; i < images.size(); ++i) {
+            VkImageViewCreateInfo imageViewCreateInfo = {};
+            imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            imageViewCreateInfo.image = images[i];
+            imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            imageViewCreateInfo.format = getImageFormat();
+            imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+            imageViewCreateInfo.subresourceRange.levelCount = 1;
+            imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+            imageViewCreateInfo.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(device, &imageViewCreateInfo, nullptr, &imageViews[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create image view");
+            }
         }
     }
 };

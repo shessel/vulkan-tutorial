@@ -111,7 +111,6 @@ private:
     }
 
     void initVulkan() {
-        createImageViews();
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
@@ -134,7 +133,6 @@ private:
 
         swapchain = nullptr;
         swapchain = device->createSwapchain(surface, physicalDevice);
-        createImageViews();
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
@@ -152,31 +150,6 @@ private:
             void */*userData*/) {
         std::cerr << "Validation Layer: " << msg << std::endl;
         return VK_FALSE;
-    }
-
-    void createImageViews() {
-        const std::vector<VkImage> swapchainImages = swapchain->getImages();
-        swapChainImageViews.resize(swapchainImages.size());
-        for (size_t i = 0; i < swapchainImages.size(); ++i) {
-            VkImageViewCreateInfo imageViewCreateInfo = {};
-            imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            imageViewCreateInfo.image = swapchainImages[i];
-            imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            imageViewCreateInfo.format = swapchain->getImageFormat();
-            imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-            imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-            imageViewCreateInfo.subresourceRange.levelCount = 1;
-            imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-            imageViewCreateInfo.subresourceRange.layerCount = 1;
-
-            if (vkCreateImageView(device->getHandle(), &imageViewCreateInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create image view");
-            }
-        }
     }
 
     void createRenderPass() {
@@ -331,13 +304,14 @@ private:
     }
 
     void createFramebuffers() {
-        swapChainFramebuffers.resize(swapChainImageViews.size());
+        const std::vector<VkImageView> swapchainImageViews = swapchain->getImageViews();
+        swapChainFramebuffers.resize(swapchainImageViews.size());
 
-        for (size_t i = 0; i < swapChainImageViews.size(); ++i) {
+        for (size_t i = 0; i < swapchainImageViews.size(); ++i) {
             VkFramebufferCreateInfo framebufferCreateInfo = {};
             framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebufferCreateInfo.attachmentCount = 1;
-            framebufferCreateInfo.pAttachments = &swapChainImageViews[i];
+            framebufferCreateInfo.pAttachments = &swapchainImageViews[i];
             framebufferCreateInfo.renderPass = renderPass;
             framebufferCreateInfo.width = swapchain->getExtent().width;
             framebufferCreateInfo.height = swapchain->getExtent().height;
@@ -524,7 +498,7 @@ private:
 
         vkDestroyRenderPass(device->getHandle(), renderPass, nullptr);
 
-        for (const auto& imageView : swapChainImageViews) {
+        for (const auto& imageView : swapchain->getImageViews()) {
             vkDestroyImageView(device->getHandle(), imageView, nullptr);
         }
 
@@ -555,7 +529,6 @@ private:
     VkQueue presentQueue;
 
     std::shared_ptr<Render::Vulkan::Swapchain> swapchain;
-    std::vector<VkImageView> swapChainImageViews;
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
     std::shared_ptr<Render::Vulkan::Shader> vertexShaderModule;
