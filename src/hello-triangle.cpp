@@ -16,10 +16,12 @@
 #include "render/vulkan/Instance.hpp"
 #include "render/vulkan/PhysicalDevice.hpp"
 #include "render/vulkan/Device.hpp"
+#include "render/vulkan/Shader.hpp"
 #include "ui/GlfwWindow.hpp"
 
 using Render::Vulkan::QueueFamilyIndices;
 using Render::Vulkan::SwapChainCapabilities;
+using Render::Vulkan::Shader;
 
 class HelloTriangleApplication {
 public:
@@ -36,6 +38,9 @@ public:
         device = physicalDevice->createDevice(surface, deviceExtensions, enableValidationLayers);
         graphicsQueue = device->getQueue(indices.graphicsFamily);
         presentQueue = device->getQueue(indices.presentFamily);
+
+        vertexShaderModule = std::make_shared<Shader>("vert.spv", device);
+        fragmentShaderModule = std::make_shared<Shader>("frag.spv", device);
     }
 
     void run() {
@@ -102,7 +107,6 @@ private:
     }
 
     void initVulkan() {
-        createShaders();
         createSwapChain();
         createImageViews();
         createRenderPass();
@@ -144,38 +148,6 @@ private:
             void */*userData*/) {
         std::cerr << "Validation Layer: " << msg << std::endl;
         return VK_FALSE;
-    }
-
-    void createShaders() {
-        auto vertexShaderCode = readFile("vert.spv");
-        auto fragmentShaderCode = readFile("frag.spv");
-        vertexShaderModule = createShaderModule(vertexShaderCode);
-        fragmentShaderModule = createShaderModule(fragmentShaderCode);
-    }
-
-    static std::vector<char> readFile(const std::string& fileName) {
-        std::ifstream fileStream(fileName, std::ios::ate | std::ios::binary);
-        if (!fileStream.is_open()) {
-            throw std::runtime_error("failed to open file " + fileName);
-        }
-        std::vector<char> fileContent(fileStream.tellg());
-        fileStream.seekg(0);
-        fileStream.read(fileContent.data(), fileContent.size());
-        fileStream.close();
-        return fileContent;
-    }
-
-    VkShaderModule createShaderModule(const std::vector<char>& byteCode) {
-        VkShaderModuleCreateInfo shaderModuleCreateInfo = {};
-        shaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        shaderModuleCreateInfo.codeSize = byteCode.size();
-        shaderModuleCreateInfo.pCode = reinterpret_cast<const uint32_t*>(byteCode.data());
-
-        VkShaderModule shaderModule;
-        if (vkCreateShaderModule(device->getHandle(), &shaderModuleCreateInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create shader module");
-        }
-        return shaderModule;
     }
 
     void createSwapChain() {
@@ -342,13 +314,13 @@ private:
         VkPipelineShaderStageCreateInfo vertexStageCreateInfo = {};
         vertexStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertexStageCreateInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertexStageCreateInfo.module = vertexShaderModule;
+        vertexStageCreateInfo.module = vertexShaderModule->getHandle();
         vertexStageCreateInfo.pName = "main";
 
         VkPipelineShaderStageCreateInfo fragmentStageCreateInfo = {};
         fragmentStageCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         fragmentStageCreateInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragmentStageCreateInfo.module = fragmentShaderModule;
+        fragmentStageCreateInfo.module = fragmentShaderModule->getHandle();
         fragmentStageCreateInfo.pName = "main";
 
         VkPipelineShaderStageCreateInfo shaderStages[] = {
@@ -657,9 +629,6 @@ private:
 
         vkDestroyCommandPool(device->getHandle(), commandPool, nullptr);
 
-        vkDestroyShaderModule(device->getHandle(), fragmentShaderModule, nullptr);
-        vkDestroyShaderModule(device->getHandle(), vertexShaderModule, nullptr);
-
         vkDestroySurfaceKHR(instance, surface, nullptr);
     }
 
@@ -679,8 +648,8 @@ private:
     std::vector<VkImageView> swapChainImageViews;
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
-    VkShaderModule vertexShaderModule;
-    VkShaderModule fragmentShaderModule;
+    std::shared_ptr<Render::Vulkan::Shader> vertexShaderModule;
+    std::shared_ptr<Render::Vulkan::Shader> fragmentShaderModule;
 
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
