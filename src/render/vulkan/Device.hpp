@@ -1,12 +1,17 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include <vulkan/vulkan.h>
+
 #include "QueueFamilyIndices.hpp"
 
 namespace Render::Vulkan
 {
+class Swapchain;
+class PhysicalDevice;
+
 class Device {
 public:
     Device(VkDevice device) : device(device) {}
@@ -38,6 +43,8 @@ public:
     VkDevice getHandle() const {
         return device;
     }
+
+    std::shared_ptr<Swapchain> createSwapchain(const VkSurfaceKHR& surface, const std::shared_ptr<const PhysicalDevice>& physicalDevice);
 
 private:
     VkDevice device;

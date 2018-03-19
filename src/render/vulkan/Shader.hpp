@@ -13,7 +13,7 @@ namespace Render::Vulkan
 {
 class Shader {
 public:
-    Shader(const std::string& fileName, const std::shared_ptr<const Device>& device) : device(device) {
+    Shader(const std::string& fileName, const std::shared_ptr<const Device> device) : device(device) {
         auto shaderCode = readFile(fileName);
         shaderModule = createShaderModule(shaderCode);
     }
@@ -52,7 +52,7 @@ private:
         return shaderModule;
     }
 
-    const std::shared_ptr<const Device>& device;
+    const std::shared_ptr<const Device> device;
     VkShaderModule shaderModule;
 };
 }

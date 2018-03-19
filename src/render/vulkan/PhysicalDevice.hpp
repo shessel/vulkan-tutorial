@@ -1,21 +1,18 @@
 #pragma once
 
+#include <cstring>
 #include <memory>
+#include <set>
 #include <vector>
 
 #include <vulkan/vulkan.h>
 
 #include "Device.hpp"
 #include "QueueFamilyIndices.hpp"
+#include "SwapchainCapabilities.hpp"
 
 namespace Render::Vulkan
 {
-struct SwapChainCapabilities {
-    VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    std::vector<VkSurfaceFormatKHR> surfaceFormats;
-    std::vector<VkPresentModeKHR> presentModes;
-};
-
 class Instance;
 
 class PhysicalDevice {
@@ -36,7 +33,7 @@ public:
         return device;
     }
 
-    std::shared_ptr<Device> createDevice(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions, bool enableValidationLayers) {
+    std::shared_ptr<Device> createDevice(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions, bool enableValidationLayers) const {
         QueueFamilyIndices indices = findQueueFamilyIndices(surface);
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -77,17 +74,7 @@ public:
         return std::shared_ptr<Device>(new Device(deviceToCreate));
     }
 
-    bool isSuitable(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) {
-        QueueFamilyIndices indices = findQueueFamilyIndices(surface);
-        bool extensionsSupported = checkSupportedDeviceExtensions(deviceExtensions);
-        SwapChainCapabilities swapChainCapabilities = querySwapChainCapabilities(surface);
-        return indices.isComplete()
-            && extensionsSupported
-            && !swapChainCapabilities.presentModes.empty()
-            && !swapChainCapabilities.surfaceFormats.empty();
-    }
-
-    QueueFamilyIndices findQueueFamilyIndices(VkSurfaceKHR surface) {
+    QueueFamilyIndices findQueueFamilyIndices(VkSurfaceKHR surface) const {
         QueueFamilyIndices indices;
 
         uint32_t queueFamilyCount;
@@ -114,24 +101,24 @@ public:
         return indices;
     }
 
-    SwapChainCapabilities querySwapChainCapabilities(VkSurfaceKHR surface) {
-        SwapChainCapabilities swapChainCapabilities;
+    SwapchainCapabilities querySwapchainCapabilities(VkSurfaceKHR surface) const {
+        SwapchainCapabilities swapchainCapabilities;
         uint32_t surfaceFormatCount;
         vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surfaceFormatCount, nullptr);
         if (surfaceFormatCount > 0) {
-            swapChainCapabilities.surfaceFormats.resize(surfaceFormatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surfaceFormatCount, swapChainCapabilities.surfaceFormats.data());
+            swapchainCapabilities.surfaceFormats.resize(surfaceFormatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surfaceFormatCount, swapchainCapabilities.surfaceFormats.data());
         }
 
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &swapChainCapabilities.surfaceCapabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &swapchainCapabilities.surfaceCapabilities);
 
         uint32_t presentModeCount;
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
         if (presentModeCount > 0) {
-            swapChainCapabilities.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, swapChainCapabilities.presentModes.data());
+            swapchainCapabilities.presentModes.resize(presentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, swapchainCapabilities.presentModes.data());
         }
-        return swapChainCapabilities;
+        return swapchainCapabilities;
     }
 
 private:
@@ -141,7 +128,17 @@ private:
 
     PhysicalDevice& operator=(const PhysicalDevice& other) = delete;
 
-    bool checkSupportedDeviceExtensions(const std::vector<const char*>& deviceExtensions) {
+    bool isSuitable(VkSurfaceKHR surface, const std::vector<const char*>& deviceExtensions) const {
+        QueueFamilyIndices indices = findQueueFamilyIndices(surface);
+        bool extensionsSupported = checkSupportedDeviceExtensions(deviceExtensions);
+        SwapchainCapabilities swapchainCapabilities = querySwapchainCapabilities(surface);
+        return indices.isComplete()
+            && extensionsSupported
+            && !swapchainCapabilities.presentModes.empty()
+            && !swapchainCapabilities.surfaceFormats.empty();
+    }
+
+    bool checkSupportedDeviceExtensions(const std::vector<const char*>& deviceExtensions) const {
         uint32_t extensionPropertyCount;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionPropertyCount, nullptr);
         if (extensionPropertyCount > 0) {

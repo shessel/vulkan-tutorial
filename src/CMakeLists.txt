@@ -28,5 +28,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/")
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
-add_executable(hello-triangle hello-triangle.cpp)
+set(SOURCES
+    hello-triangle.cpp
+    render/vulkan/Device.cpp
+)
+
+add_executable(hello-triangle ${SOURCES})
 target_link_libraries(hello-triangle ${Vulkan_LIBRARY} glfw ${GLFW_LIBRARIES})
